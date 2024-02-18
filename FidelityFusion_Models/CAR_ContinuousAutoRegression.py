@@ -204,8 +204,13 @@ if __name__ == "__main__":
     num_rows_to_select = 50
     _, indices = torch.topk(entropy, num_rows_to_select)
     selected_rows = tensor_tiny_train_x[indices]
+    selected_x = [tensor_tiny_train_x]
+    selected_y = [tensor_y_list[0]]
+    for i in range(tiny_train_y.shape[1]-1):
+        selected_x.append(tensor_tiny_train_x[indices])
+        selected_y.append(tensor_y_list[i+1][indices])
     # selected_y should be a list, list[k] is a tensor of tiny_train_y[indices, k]:
-    selected_y = [tensor_y[indices] for tensor_y in tensor_y_list]
+    # selected_y = [tensor_y[indices] for tensor_y in tensor_y_list[1:]]
 
     num_fidelity_indicators = len(selected_y)
 
@@ -213,7 +218,7 @@ if __name__ == "__main__":
         {
             'fidelity_indicator': k,
             'raw_fidelity_name': str(k),
-            'X': selected_rows,  # Assign the same 'X' value for each item
+            'X': selected_x[k],  # Assign the same 'X' value for each item
             'Y': selected_y[k]  # Assign 'Y' from the k-th item of selected_y
         }
         for k in range(num_fidelity_indicators)  # Iterate over the range of fidelity indicators
