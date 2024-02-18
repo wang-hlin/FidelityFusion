@@ -5,7 +5,7 @@ class SE_kernel(torch.nn.Module):
     # Squared Exponential Kernel
     def __init__(self, noise_exp_format, length_scale=1., scale=1.) -> None:
         super().__init__()
-        self.noise_exp_format = noise_exp_format
+        self.noise_exp_format = noise_exp_format['noise_exp_format']
 
         length_scale = torch.tensor(length_scale)
         scale = torch.tensor(scale)
