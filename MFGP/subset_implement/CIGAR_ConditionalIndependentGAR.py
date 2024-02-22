@@ -184,7 +184,7 @@ class CIGAR(torch.nn.Module):
         Computes the loss for multiple fidelity levels.
 
         Args:
-            x (torch.Tensor): The input tensor.
+            x (torch.Tensor/list): The input tensor.
             y_list (list): List of tensors representing the output at each fidelity level.
             to_fidelity_n (int, optional): The target fidelity level. Defaults to -1.
 
@@ -206,10 +206,13 @@ class CIGAR(torch.nn.Module):
         self.check_fidelity_index(to_fidelity_n)
 
         loss = 0.
+        #if x is a tensor make it to a list include len(y_list) tensor
+        if isinstance(x, torch.Tensor):
+            x = [x]*len(y_list)
         for _fn in range(to_fidelity_n+1):
             if _fn == 0:
-                loss += self.cigp_list[0].compute_loss(x, y_list[0])
+                loss += self.cigp_list[0].compute_loss(x[0], y_list[0])
             else:
                 res = self.matrix_list[_fn-1].forward(y_list[_fn-1], y_list[_fn])
-                loss += self.cigp_list[_fn].compute_loss(x, res, update_data=True)
+                loss += self.cigp_list[_fn].compute_loss(x[_fn], res, update_data=True)
         return loss

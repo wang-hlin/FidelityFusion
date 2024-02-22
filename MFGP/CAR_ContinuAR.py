@@ -149,7 +149,7 @@ class CAR(torch.nn.Module):
             to_fidelity_n = self.fidelity_num + to_fidelity_n
         self.check_fidelity_index(to_fidelity_n)
 
-        for _fn in range(to_fidelity_n+1):
+        for _fn in range(to_fidelity_n):
             if _fn == 0:
                 mean, var = self.cigp.forward(x, x_var)
             else:
