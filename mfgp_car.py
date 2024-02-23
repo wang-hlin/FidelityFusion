@@ -215,9 +215,9 @@ if __name__ == '__main__':
 
     # predict and plot result
     with torch.no_grad():
-        # if model_name in ['CAR']:
-        #     # predict_y = model(eval_x, fidelity_num-1)[0]
-        #     predict_y = model.forward(x = eval_x,to_fidelity_n = 10000)[0]
+        if model_name in ['CAR']:
+            # predict_y = model(eval_x, fidelity_num-1)[0]
+            predict_y = model.forward(x = eval_x,to_fidelity_n = -1)[0]
         else:
             predict_y = model(eval_x)[0]
 
