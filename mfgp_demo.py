@@ -10,22 +10,6 @@ from MFGP import *
 from MFGP.utils.normalizer import Dateset_normalize_manager
 
 
-# def get_testing_data(fidelity_num):
-#     x = np.load(r'assets/sample_data/input.npy')
-#     y_list = [np.load(r'assets/sample_data/output_fidelity_{}.npy'.format(i)) for i in range(3)]
-#     y_list = y_list[:fidelity_num]
-#
-#     x = torch.tensor(x)
-#     y_list = [torch.tensor(_) for _ in y_list]
-#
-#     sample_num = x.shape[0]
-#     tr_x = x[:sample_num//2, ...].float()
-#     eval_x = x[sample_num//2:, ...].float()
-#     tr_y_list = [y[:sample_num//2, ...].float() for y in y_list]
-#     eval_y_list = [y[sample_num//2:, ...].float() for y in y_list]
-#
-#     return tr_x, eval_x, tr_y_list, eval_y_list
-
 def get_testing_data_hpo():
     hyperparameter_index = pd.read_csv(
         "/home/haolin/VSCode/automl2024/benchmarking/nursery/benchmark_new/data/lcbench-christine/hyperparameter_index.csv")
@@ -92,78 +76,10 @@ def get_testing_data_hpo():
         for k in range(num_fidelity_indicators)  # Iterate over the range of fidelity indicators
     ]
 
-    # sample_num = tiny_objectives_default.shape[0]
-    #
-    # tr_x = torch.tensor(tensor_tiny_train_x[:sample_num//2, ...]).float()
-    # eval_x = torch.tensor(tensor_tiny_train_x[sample_num//2:, ...]).float()
-    # tr_y_list = [y[:sample_num//2, ...].float() for y in tensor_y_list]
-    # eval_y_list = [y[sample_num//2:, ...].float() for y in tensor_y_list]
-    #
-    # # tr_x_sliced = tr_x[:, :50]
-    # # tr_x = np.concatenate((tr_x_sliced, tr_x[:, -1:]), axis=1)
-    # # tr_y_list = tr_y_list[:50] + [tr_y_list[-1]]
-    # tr_y_list = tr_y_list[:50]
-    # eval_y_list = eval_y_list[:50] + [eval_y_list[-1]]
-    # # eval_y_list = eval_y_list[:50]
-    # #########
-    #
-    # print(tiny_train_x.shape)
-    # print(tiny_train_y.shape)
     fidelity_num = tiny_objectives_default.shape[1]
     return selected_x, selected_x[0], selected_y, tensor_y_list, fidelity_num
 
 
-##############
-def normalize_tensors(tr_x_list, eval_x_list, tr_y_list, eval_y_list):
-    """
-    Normalize lists of tensors and return parameters for denormalization.
-
-    Args:
-    - tensor_lists (list of lists of Tensors): The lists containing the tensors to normalize.
-
-    Returns:
-    - normalized_lists (list of lists of Tensors): The normalized tensor lists.
-    - norm_tool (dict): A tool containing the means and stds for denormalization.
-    """
-    means = []
-    stds = []
-
-    concat_tr_x_list = [torch.cat(tr_x, dim=0) for tr_x in tr_x_list]
-    mean_tr_x = [concat_tr_x.mean() for concat_tr_x in concat_tr_x_list]
-    std_tr_x = [concat_tr_x.std() for concat_tr_x in concat_tr_x_list]
-    normalized_tr_x_list = [[(t - mean) / std for t in tr_x] for tr_x, mean, std in zip(tr_x_list, mean_tr_x, std_tr_x)]
-
-    concat_tr_y_list = [torch.cat(tr_y, dim=0) for tr_y in tr_y_list]
-    mean_tr_y_list = [concat_tr_y.mean() for concat_tr_y in concat_tr_y_list]
-    std_tr_y_list = [concat_tr_y.std() for concat_tr_y in concat_tr_y_list]
-    normalized_tr_y_list = [[(t - mean) / std for t in tr_y] for tr_y, mean, std in
-                            zip(tr_y_list, mean_tr_y_list, std_tr_y_list)]
-
-    eval_x_list = [eval_x_list]
-    normalized_eval_x_list = [(eval_x - mean) / std for eval_x, mean, std in
-                              zip(eval_x_list, [mean_tr_x[0]], [std_tr_x[0]])]
-
-    normalized_eval_y_list = [(eval_y - mean) / std for eval_y, mean, std in
-                              zip(eval_y_list, mean_tr_y_list, std_tr_y_list)]
-    norm_tool = {'means_x': mean_tr_x, 'means_y': mean_tr_y_list, 'stds_x': std_tr_x, 'stds_y': std_tr_y_list}
-
-    return normalized_tr_x_list, normalized_tr_y_list, normalized_eval_x_list[0], normalized_eval_y_list, norm_tool
-
-
-def denormalize_tensors(pred_y, norm_tool):
-    # denormalized_lists = []
-    for i, normalized_list in enumerate(normalized_lists):
-        mean = norm_tool['means'][i]
-        std = norm_tool['stds'][i]
-        denormalized_list = [(t * std) + mean for t in normalized_list]
-        denormalized_lists.append(denormalized_list)
-    mean = norm_tool['means_y'][-1]
-    std = norm_tool['stds_y'][-1]
-    denormalized_pred_y = (pred_y * std) + mean
-    return denormalized_pred_y
-
-
-###################
 
 def normalize_data(tr_x, eval_x, tr_y_list, eval_y_list):
     # normalize
