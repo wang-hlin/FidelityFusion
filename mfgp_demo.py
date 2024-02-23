@@ -2,30 +2,173 @@ import sys
 
 import torch
 import numpy as np
+import pandas as pd
+import torch.nn.functional as F
+import random
 
 from MFGP import *
 from MFGP.utils.normalizer import Dateset_normalize_manager
 
-def get_testing_data(fidelity_num):
-    x = np.load(r'assets/sample_data/input.npy')
-    y_list = [np.load(r'assets/sample_data/output_fidelity_{}.npy'.format(i)) for i in range(3)]
-    y_list = y_list[:fidelity_num]
 
-    x = torch.tensor(x)
-    y_list = [torch.tensor(_) for _ in y_list]
+# def get_testing_data(fidelity_num):
+#     x = np.load(r'assets/sample_data/input.npy')
+#     y_list = [np.load(r'assets/sample_data/output_fidelity_{}.npy'.format(i)) for i in range(3)]
+#     y_list = y_list[:fidelity_num]
+#
+#     x = torch.tensor(x)
+#     y_list = [torch.tensor(_) for _ in y_list]
+#
+#     sample_num = x.shape[0]
+#     tr_x = x[:sample_num//2, ...].float()
+#     eval_x = x[sample_num//2:, ...].float()
+#     tr_y_list = [y[:sample_num//2, ...].float() for y in y_list]
+#     eval_y_list = [y[sample_num//2:, ...].float() for y in y_list]
+#
+#     return tr_x, eval_x, tr_y_list, eval_y_list
 
-    sample_num = x.shape[0]
-    tr_x = x[:sample_num//2, ...].float()
-    eval_x = x[sample_num//2:, ...].float()
-    tr_y_list = [y[:sample_num//2, ...].float() for y in y_list]
-    eval_y_list = [y[sample_num//2:, ...].float() for y in y_list]
+def get_testing_data_hpo():
+    hyperparameter_index = pd.read_csv(
+        "/home/haolin/VSCode/automl2024/benchmarking/nursery/benchmark_new/data/lcbench-christine/hyperparameter_index.csv")
+    objectives_evaluations = np.load(
+        "/home/haolin/VSCode/automl2024/benchmarking/nursery/benchmark_new/data/lcbench-christine/objectives_evaluations.npy")
 
-    return tr_x, eval_x, tr_y_list, eval_y_list
-    
+    # tiny_hyperparameter_index = hyperparameter_index[:1000]
+    tiny_hyperparameter_index = hyperparameter_index
+    # tiny_objectives_default = objectives_evaluations[:1000, 0, :, 0]
+    tiny_objectives_default = objectives_evaluations[:, 0, :, 0]
+    # np.save('/home/haolin/VSCode/tiny_objectives.npy', tiny_objectives_default)
+    print(tiny_objectives_default.shape)
+    tiny_objectives_default = -tiny_objectives_default
+    # replace "tanh", "relu", "cosine", "const" with numbers:
+    tiny_hyperparameter_index = tiny_hyperparameter_index.replace("tanh", 0)
+    tiny_hyperparameter_index = tiny_hyperparameter_index.replace("relu", 1)
+    tiny_hyperparameter_index = tiny_hyperparameter_index.replace("cosine", 0)
+    tiny_hyperparameter_index = tiny_hyperparameter_index.replace("const", 1)
+    tiny_train_set = tiny_objectives_default
+    # np.save('/home/haolin/VSCode/tiny_train.csv', tiny_train_set)
+
+    tiny_train_x = tiny_hyperparameter_index
+    tiny_train_y = tiny_train_set
+    np_tiny_train_x = tiny_train_x.to_numpy()
+    tensor_tiny_train_x = torch.tensor(np_tiny_train_x).float()
+
+    tensor_y_list = []
+
+    for i in range(tiny_train_y.shape[1]):  # np_array.shape[1] is 100
+        # Extract the i-th column and convert it to a PyTorch tensor of shape (1000,)
+        col_tensor = torch.tensor(tiny_train_y[:, i])
+
+        # Reshape the tensor to (1, 1000) and add it to the list
+        tensor_y_list.append(col_tensor.unsqueeze(1))
+
+    sample_num = tiny_objectives_default.shape[0]
+
+    normalized_x = F.softmax(tensor_tiny_train_x, dim=1)
+    entropy = -torch.sum(normalized_x * torch.log(normalized_x), dim=1)
+    num_rows_to_select = 50
+    _, indices = torch.topk(entropy, num_rows_to_select)
+    selected_rows = tensor_tiny_train_x[indices]
+    selected_x = [tensor_tiny_train_x]
+    selected_y = [tensor_y_list[0]]
+
+    for i in range(tiny_train_y.shape[1] - 1):
+        selected_x.append(tensor_tiny_train_x[indices])
+        selected_y.append(tensor_y_list[i + 1][indices])
+    # selected_y should be a list, list[k] is a tensor of tiny_train_y[indices, k]:
+    # selected_y = [tensor_y[indices] for tensor_y in tensor_y_list[1:]]
+
+    num_fidelity_indicators = len(selected_y)
+
+    # rest_of_y = selected_y[1:]
+    # random.shuffle(rest_of_y)
+    # selected_y = [selected_y[0]] + rest_of_y
+    initial_data = [
+        {
+            'fidelity_indicator': k,
+            'raw_fidelity_name': str(k),
+            'X': selected_x[k],  # Assign the same 'X' value for each item
+            'Y': selected_y[k]  # Assign 'Y' from the k-th item of selected_y
+        }
+        for k in range(num_fidelity_indicators)  # Iterate over the range of fidelity indicators
+    ]
+
+    # sample_num = tiny_objectives_default.shape[0]
+    #
+    # tr_x = torch.tensor(tensor_tiny_train_x[:sample_num//2, ...]).float()
+    # eval_x = torch.tensor(tensor_tiny_train_x[sample_num//2:, ...]).float()
+    # tr_y_list = [y[:sample_num//2, ...].float() for y in tensor_y_list]
+    # eval_y_list = [y[sample_num//2:, ...].float() for y in tensor_y_list]
+    #
+    # # tr_x_sliced = tr_x[:, :50]
+    # # tr_x = np.concatenate((tr_x_sliced, tr_x[:, -1:]), axis=1)
+    # # tr_y_list = tr_y_list[:50] + [tr_y_list[-1]]
+    # tr_y_list = tr_y_list[:50]
+    # eval_y_list = eval_y_list[:50] + [eval_y_list[-1]]
+    # # eval_y_list = eval_y_list[:50]
+    # #########
+    #
+    # print(tiny_train_x.shape)
+    # print(tiny_train_y.shape)
+    fidelity_num = tiny_objectives_default.shape[1]
+    return selected_x, selected_x[0], selected_y, tensor_y_list, fidelity_num
+
+
+##############
+def normalize_tensors(tr_x_list, eval_x_list, tr_y_list, eval_y_list):
+    """
+    Normalize lists of tensors and return parameters for denormalization.
+
+    Args:
+    - tensor_lists (list of lists of Tensors): The lists containing the tensors to normalize.
+
+    Returns:
+    - normalized_lists (list of lists of Tensors): The normalized tensor lists.
+    - norm_tool (dict): A tool containing the means and stds for denormalization.
+    """
+    means = []
+    stds = []
+
+    concat_tr_x_list = [torch.cat(tr_x, dim=0) for tr_x in tr_x_list]
+    mean_tr_x = [concat_tr_x.mean() for concat_tr_x in concat_tr_x_list]
+    std_tr_x = [concat_tr_x.std() for concat_tr_x in concat_tr_x_list]
+    normalized_tr_x_list = [[(t - mean) / std for t in tr_x] for tr_x, mean, std in zip(tr_x_list, mean_tr_x, std_tr_x)]
+
+    concat_tr_y_list = [torch.cat(tr_y, dim=0) for tr_y in tr_y_list]
+    mean_tr_y_list = [concat_tr_y.mean() for concat_tr_y in concat_tr_y_list]
+    std_tr_y_list = [concat_tr_y.std() for concat_tr_y in concat_tr_y_list]
+    normalized_tr_y_list = [[(t - mean) / std for t in tr_y] for tr_y, mean, std in
+                            zip(tr_y_list, mean_tr_y_list, std_tr_y_list)]
+
+    eval_x_list = [eval_x_list]
+    normalized_eval_x_list = [(eval_x - mean) / std for eval_x, mean, std in
+                              zip(eval_x_list, [mean_tr_x[0]], [std_tr_x[0]])]
+
+    normalized_eval_y_list = [(eval_y - mean) / std for eval_y, mean, std in
+                              zip(eval_y_list, mean_tr_y_list, std_tr_y_list)]
+    norm_tool = {'means_x': mean_tr_x, 'means_y': mean_tr_y_list, 'stds_x': std_tr_x, 'stds_y': std_tr_y_list}
+
+    return normalized_tr_x_list, normalized_tr_y_list, normalized_eval_x_list[0], normalized_eval_y_list, norm_tool
+
+
+def denormalize_tensors(pred_y, norm_tool):
+    # denormalized_lists = []
+    for i, normalized_list in enumerate(normalized_lists):
+        mean = norm_tool['means'][i]
+        std = norm_tool['stds'][i]
+        denormalized_list = [(t * std) + mean for t in normalized_list]
+        denormalized_lists.append(denormalized_list)
+    mean = norm_tool['means_y'][-1]
+    std = norm_tool['stds_y'][-1]
+    denormalized_pred_y = (pred_y * std) + mean
+    return denormalized_pred_y
+
+
+###################
+
 def normalize_data(tr_x, eval_x, tr_y_list, eval_y_list):
     # normalize
-    norm_tool = Dateset_normalize_manager([tr_x], tr_y_list)
-    tr_x = norm_tool.normalize_input(tr_x, 0)
+    norm_tool = Dateset_normalize_manager(tr_x, tr_y_list)
+    tr_x = [norm_tool.normalize_input(_, 0) for _ in tr_x]
     tr_y_list = norm_tool.normalize_outputs(tr_y_list)
     eval_x = norm_tool.normalize_input(eval_x, 0)
     eval_y_list = norm_tool.normalize_outputs(eval_y_list)
@@ -45,6 +188,35 @@ model_dict = {
 }
 
 
+def precision_at_k(predicted_ranking, ground_truth, k):  # overlap precision
+    predicted_ranking = predicted_ranking.flatten()
+    ground_truth = ground_truth.flatten()
+
+    # Get the top k predictions
+    top_k_predictions = set(predicted_ranking[:k].tolist())
+
+    # Convert ground_truth to a set of items for efficient checking
+    ground_truth_set = set(ground_truth[:k].tolist())
+
+    # Count the number of relevant items in the top k predictions
+    num_relevant_items = sum([1 for item in top_k_predictions if item in ground_truth_set])
+
+    # Calculate precision
+    precision = num_relevant_items / k
+    return precision
+
+
+def find_matching_indices(x_1, x_2):
+    # return the indices of x_1 that are in x_2
+    matching_indices = []
+    for i, row in enumerate(x_2):
+        # Check if the current row of x_2 is in x_1
+        matches = (x_1 == row).all(dim=1)
+        if matches.any():
+            matching_indices.extend(torch.where(matches)[0].tolist())
+    return matching_indices
+
+
 if __name__ == '__main__':
     support_model = list(model_dict.keys())
     if len(sys.argv) < 2:
@@ -58,18 +230,21 @@ if __name__ == '__main__':
 
     model_name = sys.argv[1]
 
-    fidelity_num = 1 if model_name in ['CIGP', 'HOGP'] else 3
-    tr_x, eval_x, tr_y_list, eval_y_list = get_testing_data(fidelity_num)
-    
+    tr_x, eval_x, tr_y_list, eval_y_list, fidelity_num = get_testing_data_hpo()
+    groundtruth = eval_y_list[-1]
+    print(len(tr_y_list))
+
+    fidelity_num = 1 if model_name in ['CIGP', 'HOGP'] else fidelity_num
+
     src_y_shape = tr_y_list[0].shape[1:]
     if model_name in ['AR', 'CIGAR', 'CAR', 'NAR', 'ResGP', 'CIGP']:
         flatten_output = True
         sample_num = tr_y_list[0].shape[0]
-        tr_y_list = [_.reshape(sample_num, -1) for _ in tr_y_list]
-        eval_y_list = [_.reshape(sample_num, -1) for _ in eval_y_list]
+        tr_y_list = [_.reshape(_.shape[0], -1) for _ in tr_y_list]
+        eval_y_list = [_.reshape(_.shape[0], -1) for _ in eval_y_list]
 
     # normalize data
-    tr_x, eval_x, tr_y_list, eval_y_list, norm_tool = normalize_data(tr_x, eval_x, tr_y_list, eval_y_list)
+    tr_x, eval_x, tr_y_list, eval_y_list, norm_tool = normalize_data(tr_x, eval_x, tr_y_list, eval_y_list[:-1])
 
     # init model
     config = {
@@ -81,8 +256,8 @@ if __name__ == '__main__':
     # print info
     print('model: {}'.format(model_name))
     print('fidelity num: {}'.format(fidelity_num))
-    print('x shape: {}'.format(tr_x.shape))
-    print('y shape: {}'.format([_.shape for _ in tr_y_list]))
+    # print('x shape: {}'.format(tr_x.shape))
+    # print('y shape: {}'.format([_.shape for _ in tr_y_list]))
 
     # enable to test cuda
     if True and torch.cuda.is_available():
@@ -94,10 +269,10 @@ if __name__ == '__main__':
         eval_y_list = [_.cuda() for _ in eval_y_list]
 
     # training
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
-    max_epoch = 300 if model_name in ['CIGAR', 'GAR'] else 50
-        
-    train_each_fidelity_separately = False
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    max_epoch = 300 if model_name in ['CIGAR', 'GAR'] else 150
+
+    train_each_fidelity_separately = True
     if train_each_fidelity_separately and model_name not in ['CIGP', 'HOGP']:
         '''
             Train method 1: train each fidelity separately
@@ -107,11 +282,17 @@ if __name__ == '__main__':
                 optimizer.zero_grad()
                 if _fn == 0:
                     low_fidelity = None
+                    high_fidelity = tr_y_list[_fn]
+                elif tr_y_list[_fn - 1].shape[0] != tr_y_list[_fn].shape[0]:
+                    matching_indices = find_matching_indices(tr_x[_fn - 1], tr_x[_fn])
+                    low_fidelity = tr_y_list[_fn - 1][matching_indices]
+                    high_fidelity = tr_y_list[_fn]
+
                 else:
-                    low_fidelity = tr_y_list[_fn-1]
-                high_fidelity = tr_y_list[_fn]
-                nll = model.single_fidelity_compute_loss(tr_x, low_fidelity, high_fidelity, fidelity_index=_fn)
-                print('fidelity {}, epoch {}/{}, nll: {}'.format(_fn, epoch+1, max_epoch, nll.item()), end='\r')
+                    low_fidelity = tr_y_list[_fn - 1]
+                    high_fidelity = tr_y_list[_fn]
+                nll = model.single_fidelity_compute_loss(tr_x[_fn], low_fidelity, high_fidelity, fidelity_index=_fn)
+                print('fidelity {}, epoch {}/{}, nll: {}'.format(_fn, epoch + 1, max_epoch, nll.item()), end='\r')
                 nll.backward()
                 optimizer.step()
             print('\n')
@@ -124,16 +305,60 @@ if __name__ == '__main__':
             nll = model.compute_loss(tr_x, tr_y_list)
             nll.backward()
             optimizer.step()
-            print('epoch {}/{}, nll: {}'.format(epoch+1, max_epoch, nll.item()), end='\r')
-
+            print('epoch {}/{}, nll: {}'.format(epoch + 1, max_epoch, nll.item()), end='\r')
 
     # predict and plot result
     with torch.no_grad():
-        predict_y = model(eval_x)[0]
+        if model_name in ['CAR']:
+            # predict_y = model(eval_x, fidelity_num-1)[0]
+            predict_y = model.forward(x=eval_x, to_fidelity_n=fidelity_num)[0]
+        else:
+            predict_y = model(eval_x)[0]
 
     from MFGP.utils.plot_field import plot_container
-    groudtruth = norm_tool.denormalize_output(eval_y_list[-1], fidelity_num-1)
-    predict_y = norm_tool.denormalize_output(predict_y, fidelity_num-1)
-    plot_container([groudtruth.reshape(-1, *src_y_shape), predict_y.reshape(-1, *src_y_shape)], 
-                   ['ground truth', 'predict'], 0).plot(3)
 
+    # groundtruth = norm_tool.denormalize_output(eval_y_list[-1], len(tr_y_list)-1)
+    predict_y = norm_tool.denormalize_output(predict_y, len(tr_y_list) - 1)
+    # plot_container([groudtruth.reshape(-1, *src_y_shape), predict_y.reshape(-1, *src_y_shape)],
+    #                ['ground truth', 'predict'], 0).plot(3)
+    print("model_name:", model_name)
+    evaluation_num = len(groundtruth)
+    sorted_predict_y, sorted_predict_y_indices = torch.sort(predict_y, dim=0)
+    sorted_groundtruth, sorted_groundtruth_indices = torch.sort(groundtruth, dim=0)
+
+    for k in [5, 10, 20]:
+        top_k = int((k / 100) * evaluation_num)
+        top_k_predict_indices = sorted_predict_y_indices[:top_k]
+        top_k_groundtruth_indices = sorted_groundtruth_indices[:top_k]
+
+        # # Compute the intersection of indices
+        # _, indices_in_top_k_predict = torch.where(
+        #     torch.isin(top_k_groundtruth_indices, top_k_predict_indices)
+        # )
+        similarity = sum(1 for i in range(top_k) if top_k_predict_indices[i] == top_k_groundtruth_indices[i])
+
+        # similarity = indices_in_top_k_predict.numel()
+        print(f"Strict Precision @{k}%: {similarity / top_k}")
+
+    # Calculate overlap precision at 5%, 10%, 20% of all evaluations, evaluation number should be calculated first
+
+    for k in [5, 10, 20]:
+        top_k = int((k / 100) * evaluation_num)
+        similarity = precision_at_k(predicted_ranking=sorted_predict_y_indices, ground_truth=sorted_groundtruth_indices,
+                                    k=top_k)
+        print(f"Overlap Precision @{k}%: {similarity}")
+
+    mse = torch.mean((groundtruth - predict_y) ** 2)
+    print("MSE:", mse)
+
+    from scipy.stats import spearmanr
+    from scipy.stats import kendalltau
+
+    # Assuming groundtruth and predict_y are your rank vectors
+    spearman_correlation, _ = spearmanr(groundtruth, predict_y)
+    print("Spearman correlation:", spearman_correlation)
+
+    # Assuming groundtruth and predict_y are your rank vectors
+    kendall_tau, _ = kendalltau(groundtruth, predict_y)
+
+    print(f"Kendall's Tau coefficient: {kendall_tau}")

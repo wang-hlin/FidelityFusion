@@ -63,35 +63,6 @@ def get_testing_data_hpo():
 
     sample_num = tiny_objectives_default.shape[0]
 
-    normalized_x = F.softmax(tensor_tiny_train_x, dim=1)
-    entropy = -torch.sum(normalized_x * torch.log(normalized_x), dim=1)
-    num_rows_to_select = 50
-    _, indices = torch.topk(entropy, num_rows_to_select)
-    selected_rows = tensor_tiny_train_x[indices]
-    selected_x = [tensor_tiny_train_x]
-    selected_y = [tensor_y_list[0]]
-
-    for i in range(tiny_train_y.shape[1] - 1):
-        selected_x.append(tensor_tiny_train_x[indices])
-        selected_y.append(tensor_y_list[i + 1][indices])
-    # selected_y should be a list, list[k] is a tensor of tiny_train_y[indices, k]:
-    # selected_y = [tensor_y[indices] for tensor_y in tensor_y_list[1:]]
-
-    num_fidelity_indicators = len(selected_y)
-
-    # rest_of_y = selected_y[1:]
-    # random.shuffle(rest_of_y)
-    # selected_y = [selected_y[0]] + rest_of_y
-    initial_data = [
-        {
-            'fidelity_indicator': k,
-            'raw_fidelity_name': str(k),
-            'X': selected_x[k],  # Assign the same 'X' value for each item
-            'Y': selected_y[k]  # Assign 'Y' from the k-th item of selected_y
-        }
-        for k in range(num_fidelity_indicators)  # Iterate over the range of fidelity indicators
-    ]
-
     # sample_num = tiny_objectives_default.shape[0]
     #
     # tr_x = torch.tensor(tensor_tiny_train_x[:sample_num//2, ...]).float()
@@ -110,7 +81,7 @@ def get_testing_data_hpo():
     # print(tiny_train_x.shape)
     # print(tiny_train_y.shape)
     fidelity_num = tiny_objectives_default.shape[1]
-    return selected_x, selected_x[0], selected_y, tensor_y_list, fidelity_num
+    return tensor_tiny_train_x, tensor_tiny_train_x, tensor_y_list, tensor_y_list, sample_num, fidelity_num
 
 
 ##############
@@ -230,8 +201,41 @@ if __name__ == '__main__':
 
     model_name = sys.argv[1]
 
-    tr_x, eval_x, tr_y_list, eval_y_list, fidelity_num = get_testing_data_hpo()
+    tr_x, eval_x, tr_y_list, eval_y_list, sample_num, fidelity_num = get_testing_data_hpo()
+    ################################
+    normalized_x = F.softmax(tr_x, dim=1)
+    entropy = -torch.sum(normalized_x * torch.log(normalized_x), dim=1)
+    # pick top 10% of entropy
+    num_rows_to_select = int(0.1 * sample_num)
+    _, indices = torch.topk(entropy, num_rows_to_select)
+    selected_rows = tr_x[indices]
+    selected_x = [tr_x]
+    selected_y = [tr_y_list[0]]
+    full_selected_set = set(indices.numpy())
+    # for i in range(tiny_train_y.shape[1] - 1):
+    #     selected_x.append(tensor_tiny_train_x[indices])
+    #     selected_y.append(tensor_y_list[i + 1][indices])
+    # selected_y should be a list, list[k] is a tensor of tiny_train_y[indices, k]:
+    # selected_y = [tensor_y[indices] for tensor_y in tensor_y_list[1:]]
+
+    num_fidelity_indicators = len(selected_y)
+
+    # rest_of_y = selected_y[1:]
+    # random.shuffle(rest_of_y)
+    # selected_y = [selected_y[0]] + rest_of_y
+    initial_data = [
+        {
+            'fidelity_indicator': k,
+            'raw_fidelity_name': str(k),
+            'X': selected_x[k],  # Assign the same 'X' value for each item
+            'Y': selected_y[k]  # Assign 'Y' from the k-th item of selected_y
+        }
+        for k in range(num_fidelity_indicators)  # Iterate over the range of fidelity indicators
+    ]
+
+    ##############################
     groundtruth = eval_y_list[-1]
+    evaluation_num = len(groundtruth)
     print(len(tr_y_list))
 
     fidelity_num = 1 if model_name in ['CIGP', 'HOGP'] else fidelity_num
@@ -244,121 +248,144 @@ if __name__ == '__main__':
         eval_y_list = [_.reshape(_.shape[0], -1) for _ in eval_y_list]
 
     # normalize data
-    tr_x, eval_x, tr_y_list, eval_y_list, norm_tool = normalize_data(tr_x, eval_x, tr_y_list, eval_y_list[:-1])
+    tr_x, full_x, tr_y_list, full_y_list, norm_tool = normalize_data(tr_x, eval_x, tr_y_list, eval_y_list)
+    list_eval_index = [set(range(0, sample_num))] + [full_selected_set] * (fidelity_num - 1)
+    # module for stopping trails:
+    stopping_trail = [1, 3, 9, 27, 81]
 
-    # init model
-    config = {
-        'fidelity_shapes': [_y.shape[1:] for _y in tr_y_list],
-    }
-    model_define = model_dict[model_name]
-    model = model_define(config)
+    for e in range(len(stopping_trail)):
+        if stopping_trail[e] > fidelity_num:
+            break
 
-    # print info
-    print('model: {}'.format(model_name))
-    print('fidelity num: {}'.format(fidelity_num))
-    # print('x shape: {}'.format(tr_x.shape))
-    # print('y shape: {}'.format([_.shape for _ in tr_y_list]))
+        select_top_k = int(sample_num / pow(3, e))
+        current_trail = stopping_trail[e]
+        before_next_trail = min(stopping_trail[e + 1], fidelity_num)
+        tr_x = []
+        tr_y = []
+        for i in range(len(list_eval_index)):
+            list_i = list(list_eval_index[i])
+            tr_x.append(full_x[list_i])
+            tr_y.append(full_y_list[i][list_i])
 
-    # enable to test cuda
-    if True and torch.cuda.is_available():
-        print('enable cuda')
-        model = model.cuda()
-        tr_x = tr_x.cuda()
-        eval_x = eval_x.cuda()
-        tr_y_list = [_.cuda() for _ in tr_y_list]
-        eval_y_list = [_.cuda() for _ in eval_y_list]
+        # init model
+        config = {
+            'fidelity_shapes': [_y.shape[1:] for _y in tr_y_list],
+        }
+        model_define = model_dict[model_name]
+        model = model_define(config)
 
-    # training
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    max_epoch = 300 if model_name in ['CIGAR', 'GAR'] else 150
+        # print info
+        print('model: {}'.format(model_name))
+        print('fidelity num: {}'.format(fidelity_num))
+        # print('x shape: {}'.format(tr_x.shape))
+        # print('y shape: {}'.format([_.shape for _ in tr_y_list]))
 
-    train_each_fidelity_separately = True
-    if train_each_fidelity_separately and model_name not in ['CIGP', 'HOGP']:
-        '''
-            Train method 1: train each fidelity separately
-        '''
-        for _fn in range(fidelity_num):
+        # enable to test cuda
+        if True and torch.cuda.is_available():
+            print('enable cuda')
+            model = model.cuda()
+            tr_x = tr_x.cuda()
+            eval_x = eval_x.cuda()
+            tr_y_list = [_.cuda() for _ in tr_y_list]
+            eval_y_list = [_.cuda() for _ in eval_y_list]
+
+        # training
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        max_epoch = 300 if model_name in ['CIGAR', 'GAR'] else 150
+
+        train_each_fidelity_separately = True
+        if train_each_fidelity_separately and model_name not in ['CIGP', 'HOGP']:
+            '''
+                Train method 1: train each fidelity separately
+            '''
+            for _fn in range(fidelity_num):
+                for epoch in range(max_epoch):
+                    optimizer.zero_grad()
+                    if _fn == 0:
+                        low_fidelity = None
+                        high_fidelity = tr_y[_fn]
+                    elif tr_y[_fn - 1].shape[0] != tr_y[_fn].shape[0]:
+                        matching_indices = find_matching_indices(tr_x[_fn - 1], tr_x[_fn])
+                        low_fidelity = tr_y[_fn - 1][matching_indices]
+                        high_fidelity = tr_y[_fn]
+
+                    else:
+                        low_fidelity = tr_y[_fn - 1]
+                        high_fidelity = tr_y[_fn]
+                    nll = model.single_fidelity_compute_loss(tr_x[_fn], low_fidelity, high_fidelity, fidelity_index=_fn)
+                    print('fidelity {}, epoch {}/{}, nll: {}'.format(_fn, epoch + 1, max_epoch, nll.item()), end='\r')
+                    nll.backward()
+                    optimizer.step()
+                print('\n')
+        else:
+            '''
+                Train method 2: train all fidelity at the same time
+            '''
             for epoch in range(max_epoch):
                 optimizer.zero_grad()
-                if _fn == 0:
-                    low_fidelity = None
-                    high_fidelity = tr_y_list[_fn]
-                elif tr_y_list[_fn - 1].shape[0] != tr_y_list[_fn].shape[0]:
-                    matching_indices = find_matching_indices(tr_x[_fn - 1], tr_x[_fn])
-                    low_fidelity = tr_y_list[_fn - 1][matching_indices]
-                    high_fidelity = tr_y_list[_fn]
-
-                else:
-                    low_fidelity = tr_y_list[_fn - 1]
-                    high_fidelity = tr_y_list[_fn]
-                nll = model.single_fidelity_compute_loss(tr_x[_fn], low_fidelity, high_fidelity, fidelity_index=_fn)
-                print('fidelity {}, epoch {}/{}, nll: {}'.format(_fn, epoch + 1, max_epoch, nll.item()), end='\r')
+                nll = model.compute_loss(tr_x, tr_y_list)
                 nll.backward()
                 optimizer.step()
-            print('\n')
-    else:
-        '''
-            Train method 2: train all fidelity at the same time
-        '''
-        for epoch in range(max_epoch):
-            optimizer.zero_grad()
-            nll = model.compute_loss(tr_x, tr_y_list)
-            nll.backward()
-            optimizer.step()
-            print('epoch {}/{}, nll: {}'.format(epoch + 1, max_epoch, nll.item()), end='\r')
+                print('epoch {}/{}, nll: {}'.format(epoch + 1, max_epoch, nll.item()), end='\r')
 
-    # predict and plot result
-    with torch.no_grad():
-        if model_name in ['CAR']:
-            # predict_y = model(eval_x, fidelity_num-1)[0]
-            predict_y = model.forward(x=eval_x, to_fidelity_n=fidelity_num)[0]
-        else:
-            predict_y = model(eval_x)[0]
+        # predict and plot result
+        with torch.no_grad():
+            if model_name in ['CAR']:
+                # predict_y = model(eval_x, fidelity_num-1)[0]
+                predict_y = model.forward(x=eval_x, to_fidelity_n=fidelity_num)[0]
+            else:
+                predict_y = model(eval_x)[0]
 
-    from MFGP.utils.plot_field import plot_container
+        from MFGP.utils.plot_field import plot_container
 
-    # groundtruth = norm_tool.denormalize_output(eval_y_list[-1], len(tr_y_list)-1)
-    predict_y = norm_tool.denormalize_output(predict_y, len(tr_y_list) - 1)
-    # plot_container([groudtruth.reshape(-1, *src_y_shape), predict_y.reshape(-1, *src_y_shape)],
-    #                ['ground truth', 'predict'], 0).plot(3)
-    print("model_name:", model_name)
-    evaluation_num = len(groundtruth)
-    sorted_predict_y, sorted_predict_y_indices = torch.sort(predict_y, dim=0)
-    sorted_groundtruth, sorted_groundtruth_indices = torch.sort(groundtruth, dim=0)
+        # groundtruth = norm_tool.denormalize_output(eval_y_list[-1], len(tr_y_list)-1)
+        predict_y = norm_tool.denormalize_output(predict_y, len(tr_y_list) - 1)
+        # plot_container([groudtruth.reshape(-1, *src_y_shape), predict_y.reshape(-1, *src_y_shape)],
+        #                ['ground truth', 'predict'], 0).plot(3)
+        print("model_name:", model_name)
 
-    for k in [5, 10, 20]:
-        top_k = int((k / 100) * evaluation_num)
-        top_k_predict_indices = sorted_predict_y_indices[:top_k]
-        top_k_groundtruth_indices = sorted_groundtruth_indices[:top_k]
+        sorted_predict_y, sorted_predict_y_indices = torch.sort(predict_y, dim=0)
+        sorted_groundtruth, sorted_groundtruth_indices = torch.sort(groundtruth, dim=0)
 
-        # # Compute the intersection of indices
-        # _, indices_in_top_k_predict = torch.where(
-        #     torch.isin(top_k_groundtruth_indices, top_k_predict_indices)
-        # )
-        similarity = sum(1 for i in range(top_k) if top_k_predict_indices[i] == top_k_groundtruth_indices[i])
+        for k in [5, 10, 20]:
+            top_k = int((k / 100) * evaluation_num)
+            top_k_predict_indices = sorted_predict_y_indices[:top_k]
+            top_k_groundtruth_indices = sorted_groundtruth_indices[:top_k]
 
-        # similarity = indices_in_top_k_predict.numel()
-        print(f"Strict Precision @{k}%: {similarity / top_k}")
+            # # Compute the intersection of indices
+            # _, indices_in_top_k_predict = torch.where(
+            #     torch.isin(top_k_groundtruth_indices, top_k_predict_indices)
+            # )
+            similarity = sum(1 for i in range(top_k) if top_k_predict_indices[i] == top_k_groundtruth_indices[i])
 
-    # Calculate overlap precision at 5%, 10%, 20% of all evaluations, evaluation number should be calculated first
+            # similarity = indices_in_top_k_predict.numel()
+            print(f"Strict Precision @{k}%: {similarity / top_k}")
 
-    for k in [5, 10, 20]:
-        top_k = int((k / 100) * evaluation_num)
-        similarity = precision_at_k(predicted_ranking=sorted_predict_y_indices, ground_truth=sorted_groundtruth_indices,
-                                    k=top_k)
-        print(f"Overlap Precision @{k}%: {similarity}")
+        # Calculate overlap precision at 5%, 10%, 20% of all evaluations, evaluation number should be calculated first
 
-    mse = torch.mean((groundtruth - predict_y) ** 2)
-    print("MSE:", mse)
+        for k in [5, 10, 20]:
+            top_k = int((k / 100) * evaluation_num)
+            similarity = precision_at_k(predicted_ranking=sorted_predict_y_indices,
+                                        ground_truth=sorted_groundtruth_indices, k=top_k)
+            print(f"Overlap Precision @{k}%: {similarity}")
 
-    from scipy.stats import spearmanr
-    from scipy.stats import kendalltau
+        mse = torch.mean((groundtruth - predict_y) ** 2)
+        print("MSE:", mse)
 
-    # Assuming groundtruth and predict_y are your rank vectors
-    spearman_correlation, _ = spearmanr(groundtruth, predict_y)
-    print("Spearman correlation:", spearman_correlation)
+        from scipy.stats import spearmanr
+        from scipy.stats import kendalltau
 
-    # Assuming groundtruth and predict_y are your rank vectors
-    kendall_tau, _ = kendalltau(groundtruth, predict_y)
+        # Assuming groundtruth and predict_y are your rank vectors
+        spearman_correlation, _ = spearmanr(groundtruth, predict_y)
+        print("Spearman correlation:", spearman_correlation)
 
-    print(f"Kendall's Tau coefficient: {kendall_tau}")
+        # Assuming groundtruth and predict_y are your rank vectors
+        kendall_tau, _ = kendalltau(groundtruth, predict_y)
+
+        print(f"Kendall's Tau coefficient: {kendall_tau}")
+
+        # return the top_k hyperparameters index, prepare for next round of evaluation
+        top_k_hyperparameters_index = sorted_predict_y_indices[:select_top_k]
+        # add these indices to set in list_eval_index, until current_trial in the list_eval_index
+        for i in range(current_trail, before_next_trail):
+            list_eval_index[i] = list_eval_index[i].add(set(top_k_hyperparameters_index))
