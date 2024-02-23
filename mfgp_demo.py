@@ -47,17 +47,17 @@ def get_testing_data_hpo():
 
     sample_num = tiny_objectives_default.shape[0]
 
-    normalized_x = F.softmax(tensor_tiny_train_x, dim=1)
-    entropy = -torch.sum(normalized_x * torch.log(normalized_x), dim=1)
-    num_rows_to_select = 50
-    _, indices = torch.topk(entropy, num_rows_to_select)
-    selected_rows = tensor_tiny_train_x[indices]
+    # normalized_x = F.softmax(tensor_tiny_train_x, dim=1)
+    # entropy = -torch.sum(normalized_x * torch.log(normalized_x), dim=1)
+    # num_rows_to_select = 50
+    # _, indices = torch.topk(entropy, num_rows_to_select)
+    # selected_rows = tensor_tiny_train_x[indices]
     selected_x = [tensor_tiny_train_x]
     selected_y = [tensor_y_list[0]]
 
     for i in range(tiny_train_y.shape[1] - 1):
-        selected_x.append(tensor_tiny_train_x[indices])
-        selected_y.append(tensor_y_list[i + 1][indices])
+        selected_x.append(tensor_tiny_train_x)
+        selected_y.append(tensor_y_list[i + 1])
     # selected_y should be a list, list[k] is a tensor of tiny_train_y[indices, k]:
     # selected_y = [tensor_y[indices] for tensor_y in tensor_y_list[1:]]
 
