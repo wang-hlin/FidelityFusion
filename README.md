@@ -1,6 +1,8 @@
 # FidelityFusion
 
-`mfgp_demo.py` for the experiment use all fidelity except last fidelity to predict the last fidelity.
+
+
+`mfgp_demo.py` for the experiment use all fidelity except last fidelity to predict the last fidelity.  
 `mfgp_subset.py` for the experiment start from 10% full fidelity + 90% fidelity one. WIP: for loop for the stopping trials.
 ---------------------------------------------------------------------------------------
 
