@@ -28,14 +28,15 @@ from MFGP.utils.normalizer import Dateset_normalize_manager
 
 def get_testing_data_hpo():
     hyperparameter_index = pd.read_csv(
-        "/home/haolin/VSCode/automl2024/benchmarking/nursery/benchmark_new/data/lcbench-christine/hyperparameter_index.csv")
-    objectives_evaluations = np.load(
-        "/home/haolin/VSCode/automl2024/benchmarking/nursery/benchmark_new/data/lcbench-christine/objectives_evaluations.npy")
+        "/home/haolin/VSCode/automl2024/benchmarking/nursery/benchmark_new/data/fc_new/hyperparameter_index.csv")
+    objectives_evaluations = pd.read_csv(
+        "/home/haolin/VSCode/automl2024/benchmarking/nursery/benchmark_new/data/fc_new/final_data.csv", dtype=float)
 
     # tiny_hyperparameter_index = hyperparameter_index[:1000]
     tiny_hyperparameter_index = hyperparameter_index
     # tiny_objectives_default = objectives_evaluations[:1000, 0, :, 0]
-    tiny_objectives_default = objectives_evaluations[:, 0, :, 0]
+    # tiny_objectives_default = objectives_evaluations[:, 0, :, 0]
+    tiny_objectives_default = objectives_evaluations.to_numpy()
     # np.save('/home/haolin/VSCode/tiny_objectives.npy', tiny_objectives_default)
     print(tiny_objectives_default.shape)
     tiny_objectives_default = -tiny_objectives_default
@@ -50,7 +51,7 @@ def get_testing_data_hpo():
     tiny_train_x = tiny_hyperparameter_index
     tiny_train_y = tiny_train_set
     np_tiny_train_x = tiny_train_x.to_numpy()
-    tensor_tiny_train_x = torch.tensor(np_tiny_train_x).float()
+    tensor_tiny_train_x = torch.tensor(np_tiny_train_x).type(torch.float64)
 
     tensor_y_list = []
 
