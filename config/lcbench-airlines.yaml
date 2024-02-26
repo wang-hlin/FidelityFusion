@@ -1,0 +1,5 @@
+DATASET:
+  BENCHMARK: "lcbench"
+  TASK: "airlines"
+  ROOT: "C:\\Data\\automl_benchmark\\processed"
+  TRAIN_RATIO: 0.05
