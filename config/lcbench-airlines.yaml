@@ -3,3 +3,6 @@ DATASET:
   TASK: "airlines"
   ROOT: "C:\\Data\\automl_benchmark\\processed"
   TRAIN_RATIO: 0.05
+SOLVER:
+  SEED: 2024
+  STOPPING_TRAILS: [1, 3, 9, 27]

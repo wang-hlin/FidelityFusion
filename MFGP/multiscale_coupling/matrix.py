@@ -1,9 +1,9 @@
 import torch
 from MFGP.utils.dict_tools import update_dict_with_default
 
-
 import tensorly
 tensorly.set_backend('pytorch')
+
 
 def _smooth_mapping_matrix(_shape):
     if _shape[0] < _shape[1]:
@@ -75,7 +75,6 @@ class Matrix_Mapping(torch.nn.Module):
         res = high_fidelity - low_fidelity*self.rho
         return res
 
-
     def backward(self, low_fidelity, res):
         for i in range(len(self.l_shape)):
             low_fidelity = tensorly.tenalg.mode_dot(low_fidelity, self.vectors[i], i+1)
@@ -88,5 +87,3 @@ class Matrix_Mapping(torch.nn.Module):
     
     def var_backward(self, low_fidelity_var, res_var):
         return self.backward(low_fidelity_var, res_var)
-
-    

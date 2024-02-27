@@ -1,5 +1,36 @@
 # FidelityFusion - Only use code in this branch
 
+## Usage on HPC (Stanage Sheffield)
+
+### Setup the environment
+```bash
+srun --partition=gpu --qos=gpu --mem=8G --gres=gpu:1 --pty bash
+module load Anaconda3/2022.05
+module load cuDNN/8.8.0.121-CUDA-12.0.0
+conda create -n pytorch python=3.11  # change to your preferred environment name
+source activate pytorch
+pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121
+pip install -U tensorly
+```
+
+copy data to Stanage
+```bash
+cp -r /shared/ai4h/Shared/Data/automl_benchmark /mnt/parscratch/users/USERNAME/data/automl_benchmark
+```
+
+
+### Run the experiments
+Run
+```bash
+python gen_script.py
+```
+to generate yaml files and batch scripts for the experiments.
+
+Then run
+```bash
+sbatch <script_name>.sh
+```
+
 
 ## Updates by Haolin
 `mfgp_demo.py` for the experiment use all fidelity except last fidelity to predict the last fidelity.  
