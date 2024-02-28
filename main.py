@@ -80,10 +80,11 @@ def main():
 
         select_top_k = int(n_samples / pow(base, (stop_epoch_idx + 1)))
         current_epoch = stopping_trail[stop_epoch_idx]
-        if stop_epoch_idx + 1 < len(stopping_trail):
-            next_stop_epoch = stopping_trail[stop_epoch_idx + 1]
-        else:
-            next_stop_epoch = current_epoch
+        # if stop_epoch_idx + 1 < len(stopping_trail):
+        #     next_stop_epoch = stopping_trail[stop_epoch_idx + 1]
+        # else:
+        #     next_stop_epoch = current_epoch
+        next_stop_epoch = stopping_trail[stop_epoch_idx + 1]
         before_next_trail = min(next_stop_epoch, fidelity_num)
         print("Current stopping trial (epoch):", current_epoch)
 
@@ -224,9 +225,20 @@ def main():
 
         print(f"Kendall's Tau coefficient: {kendall_tau}")
 
+
+
+
+
+
         eval_index_new = list_eval_index[current_epoch-1][y_pred_sort_idx[:select_top_k]].reshape(-1)
         for i in range(current_epoch, before_next_trail):
             list_eval_index[i] = np.concatenate((list_eval_index[i], eval_index_new))
+    top_indices = list_eval_index[-1][train_size:]
+    y_sorted = -np.sort(-y_high_fid)
+    kendall_tau2, _ = kendalltau(y_sorted[:int(len(top_indices))],
+                                 -np.sort(-y_high_fid[top_indices])[:int(len(top_indices))])
+    print(f"new Kendall's Tau coefficient logic (should compare the validation loss at final fidelity): {kendall_tau2}")
+
 
     # save the final indices of selected hyperparameters
     out_file_name = os.path.join(out_dir, f"{out_file_name_prefix}_selected_indices.pkl")
