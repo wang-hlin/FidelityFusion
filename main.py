@@ -7,7 +7,10 @@ import numpy as np
 from utils import arg_parse, load_data, model_dict, normalize_data, dump_list
 from config.config import get_cfg_defaults
 from sklearn.model_selection import train_test_split
-import pickle
+
+from scipy.stats import spearmanr
+from scipy.stats import kendalltau
+# import pickle
 # import random
 
 # from MFGP import *
@@ -80,11 +83,10 @@ def main():
 
         select_top_k = int(n_samples / pow(base, (stop_epoch_idx + 1)))
         current_epoch = stopping_trail[stop_epoch_idx]
-        # if stop_epoch_idx + 1 < len(stopping_trail):
-        #     next_stop_epoch = stopping_trail[stop_epoch_idx + 1]
-        # else:
-        #     next_stop_epoch = current_epoch
-        next_stop_epoch = stopping_trail[stop_epoch_idx + 1]
+        if stop_epoch_idx + 1 < len(stopping_trail):
+            next_stop_epoch = stopping_trail[stop_epoch_idx + 1]
+        else:
+            next_stop_epoch = fidelity_num
         before_next_trail = min(next_stop_epoch, fidelity_num)
         print("Current stopping trial (epoch):", current_epoch)
 
@@ -213,9 +215,6 @@ def main():
         # mse = torch.mean((y_high_fid[matching_gt_indices] - y_pred) ** 2)
         # print("MSE:", mse)
 
-        from scipy.stats import spearmanr
-        from scipy.stats import kendalltau
-
         # Assuming y_high_fid and y_pred are your rank vectors
         spearman_correlation, _ = spearmanr(y_high_fid[valid_idx_iter], y_pred)
         print("Spearman correlation:", spearman_correlation)
@@ -225,20 +224,15 @@ def main():
 
         print(f"Kendall's Tau coefficient: {kendall_tau}")
 
-
-
-
-
-
         eval_index_new = list_eval_index[current_epoch-1][y_pred_sort_idx[:select_top_k]].reshape(-1)
         for i in range(current_epoch, before_next_trail):
             list_eval_index[i] = np.concatenate((list_eval_index[i], eval_index_new))
+
     top_indices = list_eval_index[-1][train_size:]
     y_sorted = -np.sort(-y_high_fid)
     kendall_tau2, _ = kendalltau(y_sorted[:int(len(top_indices))],
                                  -np.sort(-y_high_fid[top_indices])[:int(len(top_indices))])
     print(f"new Kendall's Tau coefficient logic (should compare the validation loss at final fidelity): {kendall_tau2}")
-
 
     # save the final indices of selected hyperparameters
     out_file_name = os.path.join(out_dir, f"{out_file_name_prefix}_selected_indices.pkl")
