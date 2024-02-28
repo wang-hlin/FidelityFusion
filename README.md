@@ -11,6 +11,7 @@ conda create -n pytorch python=3.11  # change to your preferred environment name
 source activate pytorch
 pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121
 pip install -U tensorly
+pip install scikit-learn pandas yacs
 ```
 
 copy data to Stanage

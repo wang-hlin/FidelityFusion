@@ -27,10 +27,12 @@ def mk_dir(dir_):
 
 def main():
     for benchmark in BENCHMARKS:
+        benchmark_output_root = os.path.join(output_root, benchmark)
+        mk_dir(benchmark_output_root)
         for task_name in BENCHMARKS[benchmark]:
             cfg_dir = os.path.join(cfg_root, "%s_%s" % (benchmark, task_name))
             mk_dir(cfg_dir)
-            batch_dir = os.path.join(batch_root, "%s/%s/batch" % (benchmark, task_name))
+            batch_dir = os.path.join(batch_root, "%s_%s/" % (benchmark, task_name))
             mk_dir(batch_dir)
             sbatch_fname = "%s_%s.sh" % (benchmark, task_name)
             sbatch_fpath = os.path.join(batch_dir, sbatch_fname)
@@ -47,6 +49,7 @@ def main():
                         cfg_fpath = os.path.join(cfg_dir, cfg_fname)
                         cfg_file = open(cfg_fpath, "w")
                         cfg_file.write("DATASET:\n")
+                        cfg_file.write("  ROOT: %s\n" % data_root)
                         cfg_file.write("  BENCHMARK: %s\n" % benchmark)
                         cfg_file.write("  TASK: %s\n" % task_name)
                         cfg_file.write("  TRAIN_RATIO: %s\n" % train_ratio)
@@ -63,10 +66,10 @@ def main():
                         batch_file = open(batch_fpath, "w")
                         batch_file.write("#!/bin/bash\n")
                         batch_file.write("# SBATCH --mem=10G\n")
-                        batch_file.write("# SBATCH --output=%s/%s.txt\n" % (output_dir, fname_prefix))
+                        batch_file.write("# SBATCH --output=%s/%s.txt\n" % (benchmark_output_root, fname_prefix))
                         batch_file.write("\n")
                         batch_file.write("module load Anaconda3/2022.05\n")
-                        batch_file.write("source activate torch\n")
+                        batch_file.write("source activate torch22\n")
                         batch_file.write("\n")
                         batch_file.write("cd %s\n" % code_root)
                         batch_file.write("python main.py --cfg %s\n" % cfg_fpath)
