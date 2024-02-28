@@ -13,7 +13,7 @@ SEEDS = 2025 - np.arange(5)
 # TRAIN_RATIOS = [0.01, 0.02, 0.03, 0.04, 0.05]
 TRAIN_RATIOS = [0.05]
 
-data_root = "/mnt/parscratch/users/ac1sz/data/automl_benchmark"  # data root path on HPC
+data_root = "/mnt/parscratch/users/ac1sz/data/automl_benchmark/processed"  # data root path on HPC
 output_root = "/mnt/parscratch/users/ac1sz/output/automl"  # output root path on HPC
 batch_root = "/users/ac1sz/batch/automl"  # batch root path on HPC
 cfg_root = "/users/ac1sz/cfgs/automl"  # cfg root path on HPC
@@ -32,7 +32,7 @@ def main():
         for task_name in BENCHMARKS[benchmark]:
             cfg_dir = os.path.join(cfg_root, "%s_%s" % (benchmark, task_name))
             mk_dir(cfg_dir)
-            batch_dir = os.path.join(batch_root, "%s_%s/" % (benchmark, task_name))
+            batch_dir = os.path.join(batch_root, "%s_%s" % (benchmark, task_name))
             mk_dir(batch_dir)
             sbatch_fname = "%s_%s.sh" % (benchmark, task_name)
             sbatch_fpath = os.path.join(batch_dir, sbatch_fname)
