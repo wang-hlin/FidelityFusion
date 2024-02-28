@@ -11,12 +11,17 @@ conda create -n pytorch python=3.11  # change to your preferred environment name
 source activate pytorch
 pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121
 pip install -U tensorly
-pip install scikit-learn pandas yacs
+pip install scikit-learn pandas yacs packaging
 ```
 
 copy data to Stanage
 ```bash
 cp -r /shared/ai4h/Shared/Data/automl_benchmark /mnt/parscratch/users/USERNAME/data/automl_benchmark
+```
+
+Clone the repository
+```bash
+git clone -b mfgp https://github.com/wang-hlin/FidelityFusion.git
 ```
 
 
